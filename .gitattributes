@@ -1,0 +1,19 @@
+# Satır sonları depoda hep LF; Windows'ta çalışma klasörüne de LF yazılır.
+# Linux/Docker'da CRLF'li dosyalar (özellikle betikler) "^M" hatalarına yol açar.
+* text=auto eol=lf
+
+# Windows betikleri CRLF ister.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# İkili dosyalar dokunulmadan saklanır.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.wav binary
+*.pdf binary
