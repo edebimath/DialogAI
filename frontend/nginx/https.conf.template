@@ -1,0 +1,53 @@
+# HTTPS variant, mounted over the default template by deploy/docker-compose.lan.yml.
+# Browsers only allow the microphone on https (or localhost), so voice calls from other
+# machines need this. Certificate files: deploy/certs/tls.crt and tls.key.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 8080;
+    server_tokens off;
+    return 301 https://$host:${HTTPS_PORT}$request_uri;
+}
+
+server {
+    listen 8443 ssl;
+    http2 on;
+    server_tokens off;
+    root /usr/share/nginx/html;
+    client_max_body_size 200m;
+
+    ssl_certificate /etc/nginx/certs/tls.crt;
+    ssl_certificate_key /etc/nginx/certs/tls.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    location /api/ {
+        proxy_pass http://${API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        proxy_buffering off;
+    }
+
+    location /assets/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location / {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri /index.html;
+    }
+}

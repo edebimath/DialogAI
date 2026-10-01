@@ -1,0 +1,22 @@
+# NVIDIA GPU for the LLM (Ollama) and Whisper. Needs the NVIDIA driver and the NVIDIA
+# Container Toolkit on the host (Docker Desktop on Windows: WSL 2 backend with GPU support).
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  api:
+    environment:
+      WHISPER_DEVICE: cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

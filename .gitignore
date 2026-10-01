@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Çalışma verisi ve gizli değerler
+.env
+data/
+deploy/.env
+deploy/secrets.env
+deploy/certs/*.crt
+deploy/certs/*.key
+
+# Arayüz
+node_modules/
+frontend/dist/
+frontend/e2e/screens/
+
+# Yerel geliştirme notları ve araç ayarları (depoya girmez)
+yerel-notlar/
+CLAUDE.md
+.claude/
+
+# Editör / işletim sistemi
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

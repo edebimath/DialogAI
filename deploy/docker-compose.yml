@@ -1,0 +1,99 @@
+# DialogAI on Docker. From this folder:
+#   cp .env.example .env   (fill in the secrets)
+#   docker compose up -d --build
+# NVIDIA GPU:  docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+# Voice calls from other machines (Linux host, https):
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.lan.yml up -d --build
+# See the "Docker ile kurulum" section of README.md.
+name: dialogai
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: dialogai
+      POSTGRES_USER: dialogai
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env içinde tanımlanmalı}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dialogai -d dialogai"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    environment:
+      OLLAMA_KEEP_ALIVE: 30m
+      # Longer calls than Ollama's 4096-token default.
+      OLLAMA_CONTEXT_LENGTH: "8192"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  # Pulls the models once (and again after an image update); exits when done.
+  models:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+    entrypoint: ["sh", "-c", "ollama pull \"$$LLM_MODEL\" && ollama pull \"$$EMBEDDING_MODEL\""]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: ../backend
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://dialogai:${POSTGRES_PASSWORD}@db:5432/dialogai
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET .env içinde tanımlanmalı}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@dialogai.local}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?BOOTSTRAP_ADMIN_PASSWORD .env içinde tanımlanmalı}
+      OLLAMA_URL: http://ollama:11434
+      SIMULATION_MODEL: ${LLM_MODEL:-qwen3:8b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      DEMO_API: ${DEMO_API:-false}
+      HTTP_TOOL_ALLOWED_HOSTS: ${HTTP_TOOL_ALLOWED_HOSTS:-[]}
+      # Same origin through nginx: no cross-origin access needed.
+      CORS_ORIGINS: "[]"
+    # SECRET_* values for HTTP Aracı ({{ secret.ad }}); optional file next to this one.
+    env_file:
+      - path: ./secrets.env
+        required: false
+    volumes:
+      - app-data:/data                  # uploads, recordings
+      - model-cache:/home/app/.cache    # Whisper, Piper and Smart Turn downloads
+    depends_on:
+      db:
+        condition: service_healthy
+      models:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    # No published port: only nginx (web) reaches the API.
+
+  web:
+    build: ../frontend
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  ollama-models:
+  app-data:
+  model-cache:

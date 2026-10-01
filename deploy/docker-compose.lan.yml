@@ -1,0 +1,32 @@
+# Voice calls from other machines on the network (Linux hosts).
+#
+# WebRTC audio goes straight between the browser and the API over UDP. In Docker's default
+# bridge network the API only knows its container address (172.x), which other machines can't
+# reach, so the API and nginx use the host's network here. Browsers also allow the microphone
+# only over https, so nginx serves TLS with deploy/certs/tls.crt and tls.key.
+#
+# The database and Ollama stay off the network: their ports are bound to 127.0.0.1 only.
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  ollama:
+    ports:
+      - "127.0.0.1:11434:11434"
+
+  api:
+    network_mode: host
+    environment:
+      API_HOST: 127.0.0.1      # nginx on the same host is the only way in
+      DATABASE_URL: postgresql+asyncpg://dialogai:${POSTGRES_PASSWORD}@127.0.0.1:5432/dialogai
+      OLLAMA_URL: http://127.0.0.1:11434
+
+  web:
+    network_mode: host         # listens on the host's 8080 (redirect) and 8443 (https)
+    environment:
+      API_UPSTREAM: 127.0.0.1:8000
+      HTTPS_PORT: "8443"
+    volumes:
+      - ../frontend/nginx/https.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./certs:/etc/nginx/certs:ro

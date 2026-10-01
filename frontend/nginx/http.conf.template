@@ -1,0 +1,41 @@
+# Rendered by the nginx image's envsubst: only defined variables such as ${API_UPSTREAM} are
+# replaced, nginx's own $variables stay. Keep the /api/ block in sync with https.conf.template.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 8080;
+    server_tokens off;
+    root /usr/share/nginx/html;
+    # Knowledge-base uploads: up to 20 files of 25 MB per request (the API checks each file).
+    client_max_body_size 200m;
+
+    location /api/ {
+        proxy_pass http://${API_UPSTREAM};
+        proxy_http_version 1.1;
+        # The call WebSocket.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        # Set, not appended: a client can't pass its own X-Forwarded-For to dodge login limits.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        proxy_buffering off;
+    }
+
+    location /assets/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location / {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri /index.html;
+    }
+}
